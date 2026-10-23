@@ -1,0 +1,84 @@
+// Pines del HC-SR04
+const int trigPin = 5;
+const int echoPin = 17;
+
+// Pines del L298N
+const int enaPin = 18;
+const int in1Pin = 19;
+const int in2Pin = 21;
+
+// Configuración PWM ESP32 Core v3.x
+const int pwmFreq = 5000;
+const int pwmRes = 8;
+
+// Parámetros de la rampa
+int currentSpeed = 0;
+const int accelRate = 3; // Suavidad al acelerar
+const int decelRate = 8; // Frenado más rápido para evitar colisiones
+
+// Función para medir distancia en cm
+long readDistanceCM() {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  // Timeout de 25000 us (~4 metros max) para que no bloquee si se pierde el eco
+  long duration = pulseIn(echoPin, HIGH, 25000); 
+
+  if (duration == 0) return 999; // Si no hay lectura, asumimos camino despejado
+  return duration * 0.034 / 2;
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+
+  pinMode(in1Pin, OUTPUT);
+  pinMode(in2Pin, OUTPUT);
+
+  ledcAttach(enaPin, pwmFreq, pwmRes);
+}
+
+void loop() {
+  long distance = readDistanceCM();
+
+  int targetSpeed = 0;
+
+  // Lógica de distancia:
+  // Menor a 5 cm: Detener completamente (zona de choque)
+  // De 5 cm a 40 cm: Acelera proporcionalmente a la distancia disponible
+  // Mayor a 40 cm: Máxima velocidad (camino libre)
+  if (distance <= 8) {
+    targetSpeed = 0;
+  } else if (distance > 8 && distance <= 40) {
+    targetSpeed = map(distance, 5, 40, 30, 255); // 60 es el torque mínimo de arranque
+  } else {
+    targetSpeed = 255;
+  }
+
+  // Activar puente H si hay movimiento solicitado o residual
+  if (targetSpeed > 0 || currentSpeed > 0) {
+    digitalWrite(in1Pin, HIGH);
+    digitalWrite(in2Pin, LOW);
+  } else {
+    digitalWrite(in1Pin, LOW);
+    digitalWrite(in2Pin, LOW);
+  }
+
+  // Rampa de aceleración / desaceleración
+  if (currentSpeed < targetSpeed) {
+    currentSpeed += accelRate;
+    if (currentSpeed > targetSpeed) currentSpeed = targetSpeed;
+  } else if (currentSpeed > targetSpeed) {
+    currentSpeed -= decelRate;
+    if (currentSpeed < targetSpeed) currentSpeed = targetSpeed;
+  }
+
+  ledcWrite(enaPin, currentSpeed);
+
+  delay(20);
+}
