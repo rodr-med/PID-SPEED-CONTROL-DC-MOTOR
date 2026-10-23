@@ -1,0 +1,39 @@
+const int potPin = 34;   // Entrada analógica del potenciómetro
+const int enaPin = 18;   // Pin ENA del L298N (PWM)
+const int in1Pin = 19;   // IN1 del L298N
+const int in2Pin = 21;   // IN2 del L298N
+
+// Parámetros PWM para ESP32 core v3.x
+const int pwmFreq = 10000; // 5 kHz
+const int pwmRes = 8;     // Resolución de 8 bits (0 a 255)
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(in1Pin, OUTPUT);
+  pinMode(in2Pin, OUTPUT);
+
+  // En core v3.x se enlaza directamente el pin con la frecuencia y resolución
+  ledcAttach(enaPin, pwmFreq, pwmRes);
+}
+
+void loop() {
+  int potValue = analogRead(potPin); // Lectura de 0 a 4095
+
+  // Zona muerta para evitar zumbido en reposo
+  if (potValue > 250) {
+    digitalWrite(in1Pin, HIGH);
+    digitalWrite(in2Pin, LOW);
+    
+    // Mapeo a resolución de 8 bits (0 a 255)
+    int speed = map(potValue, 100, 4095, 0, 250);
+    ledcWrite(enaPin, speed); // En v3.x se pasa directamente el pin, no el canal
+  } else {
+    // Apagado al mínimo
+    digitalWrite(in1Pin, LOW);
+    digitalWrite(in2Pin, LOW);
+    ledcWrite(enaPin, 0);
+  }
+
+  delay(20);
+}
